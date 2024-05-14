@@ -49,9 +49,10 @@ app.get("/ruta-prueba", (req, res) => {
 
 })
 
+process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 1;
 
 //Poner servidor e escuchar peticiones http
 
-app.listen(puerto, ()=>{
-    console.log("Servidor de node corriendo en el puerto:",puerto);
+app.listen(process.env.PORT || puerto, ()=>{
+    console.log("Servidor de node corriendo en el puerto:", process.env.PORT || puerto);
 })

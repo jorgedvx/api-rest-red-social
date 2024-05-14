@@ -17,11 +17,6 @@ const followUserIds = async (identityUserId) => {
 
         // Procesar array de identificadores
 
-
-        // let followingSingle = {}
-
-        // following.for
-
         let followingClean = [];
 
         following.forEach(follow => {

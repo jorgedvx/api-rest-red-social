@@ -69,10 +69,6 @@ const register = (req, res) => {
         ]
     }).exec().then(async (users) => {
 
-        // if (error) return res.status(500).json({
-        //     status: "error en la consulta",
-        //     message: "Error en la consulta de usuarios"
-        // })
 
         if (users && users.length >= 1) {
             return res.status(200).send({

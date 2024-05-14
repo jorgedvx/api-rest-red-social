@@ -1,12 +1,16 @@
 const mongoose = require("mongoose");
+require('dotenv').config()
 
+const connectionMongoDB = process.env.MONGODB_URL
 
 const connection = async() =>{
 
     try{
 
-        await mongoose.connect("mongodb://127.0.0.1:27017/mi_redsocial");
+        // await mongoose.connect("mongodb://127.0.0.1:27017/mi_redsocial");
 
+        await mongoose.connect(connectionMongoDB)
+        
         console.log("conectado corretamente a bd: mi_redsocial")
 
     }  

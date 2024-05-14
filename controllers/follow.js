@@ -32,9 +32,6 @@ const save = (req, res) => {
 
     });
 
-    // userToFollow.user = identity.id,
-    // userToFollow.followed =params.followed
-
 
     //Guardar objeto en bbdd
     userToFollow.save().then((followed) => {
@@ -141,10 +138,9 @@ const following = (req, res) => {
 
 
     // Find o follow popular datos de los usuario y paginar con mongoose paginate
-    // Find o follow popular datos de los usuario y paginar con mongoose paginate
   Follow.paginate({user: userId},options, async (error, follows)=> {
 
-        // Listado de usuarios de jack y soy lua
+
         // Sacar un array de ids de los usuarios que me siguen y los que sigo como lua
         let followUserIds = await followService.followUserIds(req.user.id);
 
