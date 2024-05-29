@@ -1,6 +1,7 @@
 const connection = require("./database/connection");
 const express = require("express");
 const cors = require("cors");
+const fileupload = require("express-fileupload")
 
 
 //Mensaje de bienvenida
@@ -22,6 +23,10 @@ app.use(cors())
 //Convertir los datos del body a objetos js
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }))
+app.use(fileupload({
+    useTempFiles: true,
+    tempFileDir: './uploads'
+}))
 
 // Cargar conf rutas
 const UserRoutes = require("./routes/user")

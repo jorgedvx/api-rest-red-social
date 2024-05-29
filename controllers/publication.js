@@ -1,6 +1,7 @@
 // Importar modulos
 const fs = require("fs")
 const path = require("path")
+const fse = require("fs-extra");
 
 // Importar modelos
 const Publication = require("../models/publication");
@@ -9,6 +10,8 @@ const { patch } = require("../routes/user");
 //Importar servicios
 const followService = require("../services/followService");
 const publication = require("../models/publication");
+const { uploadImagePublication, uploadImageUser, deleteImage } = require("../database/cloudinary");
+
 
 // Acciones de prueba
 const pruebaPublication = (req, res) => {
@@ -93,13 +96,16 @@ const detail = (req, res) => {
 
 // Elliminar publicacion
 
-const remove = (req, res) => {
+const remove = async(req, res) => {
 
     // Sacar el id de la publicacion a elimnar
     const publicationId = req.params.id;
 
+    const publicacionAntiguo = await Publication.findById({ _id: publicationId})
+
     // Find y luego un remove
-    Publication.deleteMany({ "user": req.user.id, "_id": publicationId }).then((publiDelete) => {
+    Publication.deleteMany({ "user": req.user.id, "_id": publicationId }).then(async(publiDelete) => {
+
 
         if (!publiDelete) {
 
@@ -112,10 +118,16 @@ const remove = (req, res) => {
 
         }
 
+        if(publicacionAntiguo.public_id){ 
+
+            await deleteImage(publicacionAntiguo.public_id)
+ 
+         }
+
 
         return res.status(200).send({
             status: "success",
-            message: "Eliminar publicacion",
+            message: "Publicacion eliminada",
             publication: publicationId,
             publiDelete
 
@@ -179,22 +191,22 @@ const user = (req, res) => {
 
 
 // Subir ficheros
-const upload = (req, res) => {
+const upload = async (req, res) => {
 
     // Sacar publication id
     const publicationId = req.params.id
 
     // Recoger el fichero de imagen y comprobar que existe
-    if (!req.file) {
-        return res.status(400).send({
-            status: "error",
-            message: "Peticion no incluye la imagen"
-        })
+    if (!req.files && !req.file) {
 
+        return res.status(400).json({
+            status: "error",
+            mensaje: "Seleccione una imagen"
+        });
     }
 
     // Conseguir el nombre del archivo
-    let image = req.file.originalname;
+    let image = req.files.image.name
 
 
     // Sacar la extension del archivo
@@ -214,42 +226,70 @@ const upload = (req, res) => {
             message: "Extension del fichero invalido"
         })
 
-    }
 
-    // Si es correcto, guardar en la bd
-    Publication.findByIdAndUpdate({ "user": req.user.id, "_id": publicationId }, { file: req.file.filename }, { new: true }).then((publicationUpdated) => {
 
-        if (!publicationUpdated) {
+    } else {
 
-            return res.status(400).send({
-                status: "error",
-                message: "Error en la subida de imagen"
+        if (req.files?.image) {
+
+            const result = await uploadImageUser(req.files.image.tempFilePath)
+            // console.log(result)
+
+            const publicacionAntiguo = await Publication.findById({"user": req.user.id, "_id": publicationId })
+
+            console.log(publicacionAntiguo)
+
+            // Si es correcto, guardar en la bd
+            Publication.findByIdAndUpdate({ "user": req.user.id, "_id": publicationId }, { public_id: result.public_id, secure_url: result.secure_url, file: req.files.image.name }, { new: true }).then(async (publicationUpdated) => {
+
+                if (!publicationUpdated) {
+
+                    return res.status(400).send({
+                        status: "error",
+                        message: "Error en la subida de imagen"
+
+                    })
+
+                }
+
+                fse.unlinkSync(req.files.image.tempFilePath)
+
+                if (publicacionAntiguo.file !== "default.png") {
+
+
+                    await deleteImage(publicacionAntiguo.public_id)
+
+
+
+                }
+
+                // Devolver respuesta
+                return res.status(200).send({
+                    status: "success",
+                    publication: publicationUpdated,
+                    file: req.file
+
+
+
+
+
+                })
+
+
             })
+
+                .catch((error) => {
+                    return res.status(500).send({
+                        status: "error",
+                        message: "Error en el metodo upload",
+                        error: error.message
+                    })
+
+                })
 
         }
 
-        // Devolver respuesta
-        return res.status(200).send({
-            status: "success",
-            publication: publicationUpdated,
-            file: req.file
-
-
-
-
-
-        })
-
-
-    })
-
-        .catch(error => {
-            return res.status(500).send({
-                status: "error",
-                message: "Error en el metodo upload",
-            })
-
-        })
+    }
 
 
 
@@ -261,31 +301,65 @@ const upload = (req, res) => {
 
 
 // Devolver archivos multimedia imagenes
-const media = (req, res) => {
+const media = async(req, res) => {
 
-    // Sacar el paramtro de una url
-    const file = req.params.file;
+    // // Sacar el paramtro de una url
+    // const file = req.params.file;
 
-    // Montar el path real de la imagen
-    const filePath = "./uploads/publications/" + file
+    // // Montar el path real de la imagen
+    // const filePath = "./uploads/publications/" + file
 
-    // Comprobar que existe
-    fs.stat(filePath, (error, exists) => {
+    // // Comprobar que existe
+    // fs.stat(filePath, (error, exists) => {
 
-        if (!exists) {
+    //     if (!exists) {
 
-            return res.status(400).send({
-                status: "error",
-                message: "No existe la imagen"
+    //         return res.status(400).send({
+    //             status: "error",
+    //             message: "No existe la imagen"
+    //         })
+
+    //     }
+
+    //     // Devolver un file
+
+    //     return res.sendFile(path.resolve(filePath));
+
+
+    // })
+
+
+    let publicId = req.params.file
+
+
+    await Publication.findById({ _id: publicId }).then(async (publicacion) => {
+
+        if(!publicacion.secure_url){
+
+            return res.status(402).json({
+                status: "No existe la imagen",
+                
             })
 
         }
 
-        // Devolver un file
+        let secure_url = await publicacion.secure_url
 
-        return res.sendFile(path.resolve(filePath));
+        return res.status(200).json({
+            secure_url
 
+        })
 
+    })
+
+    .catch((error)=>{
+
+        return res.status(400).json({
+            status: "Accion fallida",
+            error: error.message
+        })
+        
+        
     })
 
 

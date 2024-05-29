@@ -12,7 +12,16 @@ const PublicationSchema = Schema({
         type: String,
         required: true
     },
-    file: String,
+    file: {
+        type: String,
+        default: "default.png"
+    },
+    public_id:{
+        type: String
+    },
+    secure_url:{
+        type: String
+    },
     created_at: {
         type: Date,
         default: Date.now

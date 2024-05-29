@@ -31,6 +31,12 @@ const userSchema = Schema({
         type: String,
         default:"default.png"
     },
+    public_id:{
+        type: String
+    },
+    secure_url:{
+        type: String
+    },
     created_at:{
         type: Date,
         default: Date.now

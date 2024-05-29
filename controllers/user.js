@@ -1,6 +1,7 @@
 // importar dependecias y modulos
 const bcrypt = require("bcrypt");
 const fs = require("fs");
+const fse = require("fs-extra");
 const path = require("path");
 
 //Importar modelos
@@ -12,6 +13,7 @@ const Publication = require("../models/publication");
 const jwt = require("../services/jwt");
 const followService = require("../services/followService");
 const validate = require("../helpers/validate");
+const { uploadImageUser, deleteImage } = require("../database/cloudinary");
 
 // const { Collection } = require("mongoose")
 
@@ -46,15 +48,15 @@ const register = (req, res) => {
     }
 
     // Validacion avanzada
-    try{
+    try {
         validate(params)
 
 
     }
-    catch(error){
+    catch (error) {
         return res.status(400).json({
             status: "error",
-            message:"Validacion no superada"
+            message: "Validacion no superada"
         })
 
     }
@@ -212,9 +214,9 @@ const profile = async (req, res) => {
             }
 
             // Devolver el resultado
-            const followInfo = await followService.followThisUser(req.user.id,id)
+            const followInfo = await followService.followThisUser(req.user.id, id)
 
-            
+
 
 
 
@@ -224,7 +226,7 @@ const profile = async (req, res) => {
                 user: userProfile,
                 following: followInfo.following,
                 follower: followInfo.follower
-                
+
             })
 
         })
@@ -253,7 +255,7 @@ const list = (req, res) => {
         page: parseInt(req.params.page) || 1,
         limit: 5,
         select: "-password -role -email -__v",
-        sort:  "_id" 
+        sort: "_id"
 
     }
 
@@ -344,9 +346,9 @@ const update = (req, res) => {
 
             userToUpdate.password = pwd;
 
-        }else{
+        } else {
             delete userToUpdate.password;
-  
+
         }
 
         // Buscar y actualizar
@@ -391,103 +393,187 @@ const update = (req, res) => {
 
 }
 
-const upload = (req, res) => {
+const upload = async (req, res) => {
+
+    // Recoger id del parametro
+
 
     // Recoger el fichero de imagen y comprobar que existe
-    if (!req.file) {
-        return res.status(400).send({
-            status: "error",
-            message: "Peticion no incluye la imagen"
-        })
+    if (!req.files && !req.file) {
 
+        return res.status(400).json({
+            status: "error",
+            mensaje: "Seleccione una imagen"
+        });
     }
 
     // Conseguir el nombre del archivo
-    let image = req.file.originalname;
+    let archivo = req.files.image.name
 
 
     // Sacar la extension del archivo
-    const imageSplit = image.split("\.");
+    const imageSplit = archivo.split("\.");
     const extension = imageSplit[1];
 
     // Comprobar extension Si no es correcto
     if (extension != "png" && extension != "jpg" && extension != "jpeg" && extension != "gif") {
 
         // Borrar archivo diferent
-        const filePath = req.file.path;
-        const fileDeleted = fs.unlinkSync(filePath)
+        // const filePath = req.file.path;
+        // const fileDeleted = fs.unlinkSync(filePath)
+        
+        fs.unlink(req.files.image.tempFilePath, (error) => {
 
-        // Devolver respuesta negativa
-        return res.status(400).send({
-            status: "error",
-            message: "Extension del fichero invalido"
-        })
 
-    }
-
-    // Si es correcto, guardar en la bd
-    User.findByIdAndUpdate({ _id: req.user.id }, { image: req.file.filename }, { new: true }).then((userToUpdated) => {
-
-        if (!userToUpdated) {
-
+            // Devolver respuesta negativa
             return res.status(400).send({
                 status: "error",
-                message: "Error en la subida de imagen"
+                message: "Extension del fichero invalido"
             })
+        })
 
+    } else {
+
+        try {
+
+
+
+            if (req.files?.image) {
+
+                const result = await uploadImageUser(req.files.image.tempFilePath)
+
+                
+
+                const userAntiguo = await User.findById({ _id: req.user.id })
+
+                // console.log(req.files)
+                
+
+                // Si es correcto, guardar en la bd
+                User.findOneAndUpdate({ _id: req.user.id }, { public_id: result.public_id, secure_url: result.secure_url, image: req.files.image.name }, { new: true }).then(async (userToUpdated) => {
+
+                    if (!userToUpdated) {
+
+                        return res.status(400).send({
+                            status: "error",
+                            message: "Error en la subida de imagen"
+                        })
+
+                    }
+
+
+                    fse.unlinkSync(req.files.image.tempFilePath)
+                    console.log(userAntiguo.image)
+                    console.log(userAntiguo.public_id)
+
+                    if (userAntiguo.image !== "default.png") {
+
+
+                        await deleteImage(userAntiguo.public_id)
+
+
+
+                    }
+
+
+
+                    // Devolver respuesta
+                    return res.status(200).send({
+                        status: "success",
+                        user: userToUpdated,
+                        file: req.files,
+
+
+
+
+                    })
+
+
+                })
+
+                    .catch((error) => {
+                        return res.status(500).send({
+                            status: "error",
+                            message: "Error en el metodo upload",
+                            error: error.message  // Message of error
+                            
+                        })
+
+                    })
+
+                // .catch(function(error){
+                //     console.log(error)
+                // })
+
+            }
+
+        } catch (error) {
+            res.status(500).json({ message: error.message });
         }
-
-        // Devolver respuesta
-        return res.status(200).send({
-            status: "success",
-            user: userToUpdated,
-            file: req.file,
-
-
-
-
-        })
-
-
-    })
-
-        .catch(error => {
-            return res.status(500).send({
-                status: "error",
-                message: "Error en el metodo upload",
-            })
-
-        })
+    }
 
 
 
 }
 
-const avatar = (req, res) => {
+const avatar = async(req, res) => {
 
-    // Sacar el paramtro de una url
-    const file = req.params.file;
+    // // Sacar el paramtro de una url
+    // const file = req.params.file;
 
-    // Montar el path real de la imagen
-    const filePath = "./uploads/avatars/" + file
+    // // Montar el path real de la imagen
+    // const filePath = "./uploads/avatars/" + file
 
-    // Comprobar que existe
-    fs.stat(filePath, (error, exists) => {
+    // // Comprobar que existe
+    // fs.stat(filePath, (error, exists) => {
 
-        if (!exists) {
+    //     if (!exists) {
 
-            return res.status(400).send({
-                status: "error",
-                message: "No existe la imagen"
+    //         return res.status(400).send({
+    //             status: "error",
+    //             message: "No existe la imagen"
+    //         })
+
+    //     }
+
+    //     // Devolver un file
+
+    //     return res.sendFile(path.resolve(filePath));
+
+
+    // })
+
+    // Conseguir parametro file(id)
+    let userId = req.params.file
+
+
+    await User.findById({ _id: userId }).then(async (usuario) => {
+
+        if(!usuario.secure_url){
+
+            return res.status(402).json({
+                status: "No existe la imagen",          
             })
 
         }
 
-        // Devolver un file
+        let secure_url = await usuario.secure_url
 
-        return res.sendFile(path.resolve(filePath));
+        return res.status(200).json({
+            secure_url
 
+        })
 
+    })
+
+    .catch((error)=>{
+
+        return res.status(400).json({
+            status: "Accion fallida",
+            error: error.message
+        })
+        
+        
     })
 
 
@@ -507,8 +593,8 @@ const counters = async (req, res) => {
 
         const followed = await Follow.countDocuments({ "followed": userId });
 
-        const publications = await Publication.countDocuments({"user": userId});
-      
+        const publications = await Publication.countDocuments({ "user": userId });
+
         return res.status(200).send({
             userId,
             following: following,
